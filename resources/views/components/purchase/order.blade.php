@@ -10,8 +10,6 @@
 
                 <form class="p-4 md:p-5" method="POST" action="{{ route('purchase.orderStore') }}">
                     @csrf
-                    <input type="hidden" name="used_points" id="used_points" value="0">
-
                     @if ($cart['is_member'])
                         <div class="mb-4">
                             <label class="block text-sm font-medium text-gray-700 dark:text-white mb-1">Member Name</label>
@@ -22,14 +20,15 @@
 
                     <div class="mb-4 text-sm text-gray-800 dark:text-gray-200">
                         <p><strong>Total Price:</strong> Rp {{ number_format($cart['total_price'], 0, ',', '.') }}</p>
-                        <p><strong>Points Earned:</strong> {{ $earnedPoints }}</p>
+                        <p><strong>Points Earned:</strong> +{{ $earnedPoints }}</p>
 
                         @if ($canUsePoints)
+                            <input type="hidden" name="used_points" id="used_points_input" value="0">
                             <div class="flex items-center mt-2">
-                                <input id="usePointsCheckbox" name="usePointsCheckbox" type="checkbox"
+                                <input id="used_points_checkbox" name="used_points_checkbox" type="checkbox"
                                     class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded-sm focus:ring-blue-500 dark:focus:ring-blue-600"
                                     onchange="toggleUsePoints(this)">
-                                <label for="usePointsCheckbox" class="ms-2 text-sm font-medium">Use my point ({{ $availablePoints }})</label>
+                                <label for="used_points_checkbox" class="ms-2 text-sm font-medium">Use my point ({{ $totalAvailablePoints }})</label>
                             </div>
                         @else
                             @if ($cart['is_member'])
@@ -98,19 +97,21 @@
 
     <script>
         function toggleUsePoints(checkbox) {
-            const usedPoints = {{ $canUsePoints ? $customer->points : 0 }};
+            const previousPoints = {{ $customer->points ?? 0 }};
+            const earnedPoints = {{ $earnedPoints }};
+            const totalPoints = previousPoints + earnedPoints;
             const subTotal = {{ $cart['total_price'] }};
             const paymentInput = document.getElementById('payment');
-            const usedPointsInput = document.getElementById('used_points');
-
+            const usedPointsInput = document.getElementById('used_points_input');
+    
             if (checkbox.checked) {
-                const newTotal = subTotal - usedPoints;
+                const newTotal = subTotal - totalPoints;
                 paymentInput.value = "Rp " + newTotal.toLocaleString('id-ID');
-                usedPointsInput.value = usedPoints;
+                usedPointsInput.value = 1; // Kirim sinyal pakai poin
             } else {
                 paymentInput.value = "Rp " + subTotal.toLocaleString('id-ID');
-                usedPointsInput.value = 0;
+                usedPointsInput.value = 0; // Tidak pakai poin
             }
         }
-    </script>
+    </script>    
 </x-layout>

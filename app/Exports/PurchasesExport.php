@@ -8,12 +8,37 @@ use Maatwebsite\Excel\Concerns\WithMapping;
 
 class PurchasesExport implements FromCollection, WithHeadings, WithMapping
 {
+    protected $filter;
+
+    public function __construct($filter = 'all')
+    {
+        $this->filter = $filter;
+    }
+
     public function collection()
     {
         // Mengambil data purchases beserta hubungan customer dan produk
-        return Purchase::with(['customer', 'user', 'purchaseProducts.product'])
-            ->latest()
-            ->get();
+        $query = Purchase::with(['customer', 'user', 'purchaseProducts.product']);
+
+        // Terapkan filter berdasarkan dropdown
+        switch ($this->filter) {
+            case 'daily':
+                $query->whereDate('created_at', today());
+                break;
+            case 'weekly':
+                $query->whereBetween('created_at', [now()->startOfWeek(), now()->endOfWeek()]);
+                break;
+            case 'monthly':
+                $query->whereMonth('created_at', now()->month)
+                      ->whereYear('created_at', now()->year);
+                break;
+            case 'all':
+            default:
+                // No filter
+                break;
+        }
+
+        return $query->latest()->get();
     }
 
     public function headings(): array

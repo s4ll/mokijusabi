@@ -22,12 +22,12 @@ class PurchaseController extends Controller
         $user = Auth::user();
         $query = Purchase::with(['customer', 'user']);
 
-        // Jika user bukan admin, filter hanya untuk pembelian oleh user tersebut
+        // Filter role user
         if ($user->role !== 'admin') {
             $query->where('user_id', $user->id);
         }
 
-        // Filter berdasarkan pencarian customer atau user
+        // Search
         if ($request->filled('search')) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
@@ -39,29 +39,48 @@ class PurchaseController extends Controller
             });
         }
 
-        // Menangkap parameter untuk sorting
-        $sortBy = $request->get('sort_by', 'created_at'); // Default sorting by 'created_at'
-        $order = $request->get('order', 'desc'); // Default order is descending (terbaru/terbesar)
+        // Filter berdasarkan waktu
+        if ($request->filled('filter_by')) {
+            $now = Carbon::now();
 
-        // Menambahkan kondisi untuk sorting
-        if ($sortBy == 'sale_date') {
-            $query->orderBy('created_at', $order); // Mengurutkan berdasarkan tanggal pembelian
-        } elseif ($sortBy == 'total_price') {
-            $query->orderBy('total_price', $order); // Mengurutkan berdasarkan harga total
-        } elseif ($sortBy == 'created_by') {
-            $query->orderBy(User::select('name')
-                ->whereColumn('users.id', 'purchases.user_id'), $order); // Mengurutkan berdasarkan nama pengguna
-        } else {
-            $query->latest(); // Default pengurutan berdasarkan 'created_at' terbaru
+            switch ($request->filter_by) {
+                case 'daily':
+                    $query->whereDate('created_at', $now->toDateString());
+                    break;
+
+                case 'weekly':
+                    $startOfWeek = $now->copy()->startOfWeek(Carbon::MONDAY)->startOfDay();
+                    $endOfWeek = $now->copy()->endOfWeek(Carbon::SUNDAY)->endOfDay();
+
+                    $query->whereBetween('created_at', [$startOfWeek, $endOfWeek]);
+                    break;
+
+                case 'monthly':
+                    $query->whereMonth('created_at', $now->month)
+                        ->whereYear('created_at', $now->year);
+                    break;
+            }
         }
 
-        // Mendapatkan data pembelian dengan pagination
+        // Sort logic
+        $sortBy = $request->get('sort_by', 'created_at');
+        $order = $request->get('order', 'desc');
+
+        if ($sortBy == 'sale_date') {
+            $query->orderBy('created_at', $order);
+        } elseif ($sortBy == 'total_price') {
+            $query->orderBy('total_price', $order);
+        } elseif ($sortBy == 'created_by') {
+            $query->orderBy(User::select('name')
+                ->whereColumn('users.id', 'purchases.user_id'), $order);
+        } else {
+            $query->latest();
+        }
+
         $purchases = $query->paginate(10);
 
-        // Mengembalikan data ke tampilan
         return view('pages.purchase', compact('purchases'));
     }
-
 
     public function create()
     {
@@ -160,41 +179,51 @@ class PurchaseController extends Controller
 
         $customer = null;
         $earnedPoints = 0;
-        $canUsePoints = false;
         $availablePoints = 0;
+        $canUsePoints = false;
+        $totalAvailablePoints = 0;
 
         if ($cart['is_member']) {
+            // Ambil customer dari DB (jika sudah ada)
             $customer = Customer::where('phone', $cart['phone'])->first();
 
+            // Hitung point yang akan didapat dari pembelian
             $earnedPoints = floor($cart['total_price'] * 0.01);
 
             if ($customer) {
-                $purchaseCount = Purchase::where('customer_id', $customer->id)->count();
-                $availablePoints = $customer->points + $earnedPoints;
+                $availablePoints = $customer->points;
+                $hasPreviousPurchase = Purchase::where('customer_id', $customer->id)->exists();
 
-                // Hanya bisa pakai poin jika sudah pernah belanja sebelumnya
-                $canUsePoints = $availablePoints > 0 && $purchaseCount > 0;
+                $canUsePoints = $availablePoints > 0 && $hasPreviousPurchase;
             } else {
-                // Member baru, belum pernah belanja => belum bisa pakai poin
+                // Buat customer baru (belum masuk DB sampai order disimpan)
                 $customer = new Customer([
                     'name' => '',
                     'phone' => $cart['phone'],
                     'is_member' => true,
                     'points' => 0
                 ]);
-                $availablePoints = $earnedPoints;
-                $canUsePoints = false; // Tidak bisa pakai poin dulu
             }
+
+            $totalAvailablePoints = $availablePoints + $earnedPoints;
         }
 
-        return view('components.purchase.order', compact('cart', 'customer', 'earnedPoints', 'canUsePoints', 'availablePoints'));
+        return view('components.purchase.order', compact(
+            'cart',
+            'customer',
+            'earnedPoints',
+            'availablePoints',
+            'canUsePoints',
+            'totalAvailablePoints'
+        ));
     }
+
 
     public function orderStore(Request $request)
     {
         $request->validate([
             'member_name' => 'required_if:is_member,true',
-            'used_points' => 'nullable|integer|min:0'
+            'used_points' => 'nullable|boolean' // dari checkbox
         ]);
 
         $cart = session('cart', []);
@@ -202,10 +231,9 @@ class PurchaseController extends Controller
             return redirect()->route('purchase.create')->with('error', 'Keranjang kosong');
         }
 
-        // Handle customer
         $customer = null;
         $usedPoints = 0;
-        $earnedPoints = 0;
+        $earnedPoints = floor($cart['total_price'] * 0.01);
 
         if ($cart['is_member']) {
             $customer = Customer::updateOrCreate(
@@ -216,11 +244,11 @@ class PurchaseController extends Controller
                 ]
             );
 
-            // Hitung points
-            $earnedPoints = floor($cart['total_price'] * 0.01);
-            $usedPoints = intval($request->used_points ?? 0);
+            // Total poin (lama + yang baru didapat)
             $totalAvailablePoints = $customer->points + $earnedPoints;
-            $usedPoints = min($usedPoints, $totalAvailablePoints);            
+
+            // Hanya gunakan poin jika checkbox dicentang
+            $usedPoints = $request->used_points ? $totalAvailablePoints : 0;
         }
 
         // Hitung grand total
@@ -229,7 +257,7 @@ class PurchaseController extends Controller
         $change = $paymentAmount - $grandTotal;
 
         $purchase = Purchase::create([
-            'receipt_code' => 'INV-' . strtoupper(Str::random(5)), // atau format lain kalau mau
+            'receipt_code' => 'INV-' . strtoupper(Str::random(5)),
             'user_id' => auth()->id(),
             'customer_id' => $customer?->id,
             'used_points' => $usedPoints,
@@ -238,35 +266,34 @@ class PurchaseController extends Controller
             'change' => $change,
         ]);
 
-
-        // Simpan produk yang dibeli
+        // Simpan produk
         foreach ($cart['products'] as $item) {
             PurchaseProduct::create([
                 'purchase_id' => $purchase->id,
                 'product_id' => $item['product_id'],
                 'qty' => $item['qty'],
                 'price' => $item['price'],
-                'total' => $item['total'] // Gantilah 'total_price' dengan 'total' jika kolom sudah diganti
+                'total' => $item['total']
             ]);
 
-            // Update stok produk
             $product = Product::find($item['product_id']);
             $product->stock -= $item['qty'];
             $product->save();
         }
 
-        // Update points customer jika member
+        // Update poin member
         if ($customer) {
-            $customer->points = ($customer->points - $usedPoints) + $earnedPoints;
+            // Simpan total points terbaru (setelah penggunaan dan tambahan)
+            $customer->points = ($customer->points + $earnedPoints) - $usedPoints;
             $customer->save();
         }
 
-        // Simpan ID purchase untuk halaman detail dan bersihkan cart
         session(['last_purchase_id' => $purchase->id]);
         session()->forget('cart');
 
         return redirect()->route('purchase.detail');
     }
+
 
     public function detail()
     {
@@ -281,9 +308,10 @@ class PurchaseController extends Controller
         return view('components.purchase.detail', compact('purchase'));
     }
 
-    public function export()
+    public function export(Request $request)
     {
-        return Excel::download(new PurchasesExport, 'purchases.xlsx');
+        $filter = $request->query('filter_by', 'all');
+        return Excel::download(new PurchasesExport($filter), 'purchases.xlsx');
     }
 
     public function downloadReceipt(Purchase $purchase)

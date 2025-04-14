@@ -11,11 +11,48 @@
                 </button>
             </a>
             @endif
-            <a href="{{ route('purchase.export') }}">
-                <button class="block text-white bg-green-900 hover:bg-green-950 focus:ring-2 focus:outline-none focus:ring-green-800 font-medium rounded-lg text-sm px-5 py-2.5 text-center" type="button">
-                    Export (.xlsx)
-                </button>
-            <a/>
+
+            <!-- Dropdown Excel -->
+            <button id="dropdownExcel" data-dropdown-toggle="excel" class="text-white bg-green-900 hover:bg-green-950 focus:ring-2 focus:outline-none focus:ring-green-800 font-medium rounded-lg text-sm px-3 py-2.5 text-center inline-flex items-center" type="button">
+                Export (.xlsx)
+            </button>
+            <div id="excel" class="z-10 hidden bg-white divide-y divide-gray-100 rounded-lg shadow-sm w-44 dark:bg-gray-700">
+                <ul class="py-2 text-sm text-gray-700 dark:text-gray-200" aria-labelledby="dropdownExcel">
+                    <li>
+                        <a href="{{ route('purchase.export' , ['filter_by' => 'all']) }}" class="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 dark:hover:text-white">All</a>
+                    </li>
+                    <li>
+                        <a href="{{ route('purchase.export' , ['filter_by' => 'daily']) }}" class="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 dark:hover:text-white">Daily</a>
+                    </li>
+                    <li>
+                        <a href="{{ route('purchase.export' , ['filter_by' => 'weekly']) }}" class="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 dark:hover:text-white">Weekly</a>
+                    </li>
+                    <li>
+                        <a href="{{ route('purchase.export' , ['filter_by' => 'monthly']) }}" class="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 dark:hover:text-white">Monthly</a>
+                    </li>
+                </ul>
+            </div>
+            
+            <!-- Dropdown Sort -->
+            <button id="sort" data-dropdown-toggle="dropdown" class="text-white bg-green-900 hover:bg-green-950 focus:ring-2 focus:outline-none focus:ring-green-800 font-medium rounded-lg text-sm px-3 py-2.5 text-center inline-flex items-center" type="button">
+                <svg class="w-5 h-5 text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
+                    <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 20V10m0 10-3-3m3 3 3-3m5-13v10m0-10 3 3m-3-3-3 3"/>
+                </svg>
+            </button>
+            <div id="dropdown" class="z-10 hidden bg-white divide-y divide-gray-100 rounded-lg shadow-sm w-44 dark:bg-gray-700">
+                <ul class="py-2 text-sm text-gray-700 dark:text-gray-200" aria-labelledby="sort">
+                    <li>
+                        <a href="{{ route('purchase.index', ['filter_by' => 'daily']) }}" class="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 dark:hover:text-white">Daily</a>
+                    </li>
+                    <li>
+                        <a href="{{ route('purchase.index', ['filter_by' => 'weekly']) }}" class="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 dark:hover:text-white">Weekly</a>
+                    </li>
+                    <li>
+                        <a href="{{ route('purchase.index', ['filter_by' => 'monthly']) }}" class="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 dark:hover:text-white">Monthly</a>
+                    </li>
+                </ul>
+            </div>
+    
         </div>
         <div class="justify-end">
             <x-search/>
